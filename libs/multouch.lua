@@ -1,5 +1,3 @@
---[[]]--
-
 --&private&--
 local touches = {
     _VERSION = "v0.0.7",
@@ -18,10 +16,17 @@ local function math_clamp(_low, _n, _high)
     return math.min(math.max(_low, _n), _high)
 end
 
+local function collision_pointRectangle(_point, _rectangle)
+    return _point.x <= _rectangle.x + _rectangle.w and
+    _point.y <= _rectangle.y + _rectangle.h and 
+    _point.x >= _rectangle.x and 
+    _point.y >= _rectangle.y
+end
+
 --&public&--
 --&low level&--
 function touches.new(_limitOfTouches) --constructor
-    assert()
+    assert(type(_limitOfTouches) ~= "number", "bad argument to #1 in touches.new function (number expected got " .. type(_limitOfTouches) .. ")")
     return setmetatable({
         touches = {},
         areas = {},
@@ -32,15 +37,13 @@ function touches.new(_limitOfTouches) --constructor
 end
 
 --%area and hitbox%--
-function touches:setHitBox(_x, _y, _w, _h)
-    local isHit = false
-    for i, touch in ipairs(self.touches) do
-        isHit = touch.x <= _w and touch.y <= _h and touch.x >= _x and touch.y >= _y
-        if isHit then
-            return true, self.touch[i]
+function touches:setHitBox(_xPosition, _yPosition, _width, _height)
+    for i, touch in ipairs(love.touch.getTouches()) do
+        local touchX, touchY = love.touch.getPosition(touch)
+        if collision_pointRectangle({x = touchX, y = touchY}, {x = _xPosition, y = _yPosition, w = _width, h = _height}) then
+            return true, self:getTouch(touch)
         end
     end
-    return false
 end
 
 function touches:registerArea(_id, _x, _y, _w, _h)
@@ -122,17 +125,24 @@ end
 
 --&high level&--
 --_sheet and _quad are datatypes
-function touches:draw(_sheet, _quad, ...)
-    local x, y, sx, sy, ox, oy, kx, ky = ...
-    if type(quad) == "datatype" then
-        x, y, sx, sy, ox, oy, kx, ky = _quad, ...
-    end
-    for _, touch in ipairs(self.touches) do
-        if type(quad) == "datatype" then
-            love.graphics.draw(_sheet, _quad, touch.x + x, touch.y + y, r, sx, sy, ox, oy, kx, ky)
-            return
+function touches:draw(_texture, ...)
+    local function override(_quad, ...)
+        if type(_quad) == 'number' then
+            return nil, _quad, ...
         end
-        love.graphics.draw(_sheet, touch.x + x, touch.y + y, r, sx, sy, ox or _sheet:getWidth() / 2, oy or _sheet:getHeight() / 2, kx, ky)
+        return _quad, ...
+    end 
+
+    local _quad, x, y, sx, sy, ox, oy, kx, ky = override(...)
+   
+    if quad then
+        for _, touch in ipairs(self.touches) do
+            love.graphics.draw(_sheet, _quad, touch.x + x, touch.y + y, r, sx, sy, ox, oy, kx, ky)
+        end
+    else
+        for _, touch in ipairs(self.touches) do
+            love.graphics.draw(_sheet, touch.x + x, touch.y + y, r, sx, sy, ox, oy, kx, ky)
+        end
     end
 end
 
@@ -231,7 +241,7 @@ function touches:touchmoved(id, x, y, dx, dy, pressure)
     self.touches[i].y = y
     self.touches[i].dx = dx
     self.touches[i].dy = dy
-    self.touches[i].pressure = pressure,
+    self.touches[i].pressure = pressure
     table.insert(self.touches[i].move, self.touches[i])
 end
 
